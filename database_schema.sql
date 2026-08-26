@@ -65,10 +65,10 @@ CREATE TABLE notifications (
 
 -- Insert sample users
 INSERT INTO users (username, email, password_hash, role) VALUES
-('alice_dev', 'alice@company.com', 'hashed_pwd_1', 'Developer'),
-('bob_tester', 'bob@company.com', 'hashed_pwd_2', 'Tester'),
-('charlie_pm', 'charlie@company.com', 'hashed_pwd_3', 'Project Manager'),
-('diana_dev', 'diana@company.com', 'hashed_pwd_4', 'Developer');
+('Harsh', 'harsh@company.com', 'hashed_pwd_1', 'Developer'),
+('Krishana', 'krishana@company.com', 'hashed_pwd_2', 'Tester'),
+('Roy', 'roy@company.com', 'hashed_pwd_3', 'Project Manager'),
+('Arjun', 'arjun@company.com', 'hashed_pwd_4', 'Developer');
 
 -- Insert sample bugs
 INSERT INTO bug_records (title, description, priority, status, reporter_id, assignee_id, environment, url_route, error_log) VALUES
@@ -165,7 +165,7 @@ INSERT INTO bug_records (title, description, priority, status, reporter_id, assi
 INSERT INTO notifications (user_id, bug_id, message, is_read) VALUES
 (1, 1, 'Bug #1 assigned to you: Login page crashes on mobile (Critical)', FALSE),
 (1, 2, 'Bug #2 assigned to you: Dashboard slow on first load (High)', FALSE),
-(2, 3, 'Status update: Bug #3 now assigned to diana_dev', TRUE),
+(2, 3, 'Status update: Bug #3 now assigned to Arjun', TRUE),
 (2, 5, 'Status update: Bug #5 marked as Closed', TRUE),
 (1, 6, 'New bug reported: API rate limiting not working correctly (Critical)', FALSE),
 (4, 6, 'Bug #6 assigned to you: API rate limiting not working correctly', FALSE),

@@ -60,33 +60,23 @@ def initialize_database():
     ''')
     cursor = conn.cursor()
     seeded_users = [
-        ('alice_dev', 'alice@company.com', 'alice123', 'Developer'),
-        ('bob_tester', 'bob@company.com', 'bob123', 'Tester'),
-        ('charlie_pm', 'charlie@company.com', 'charlie123', 'Project Manager'),
-        ('diana_dev', 'diana@company.com', 'diana123', 'Developer'),
+        ('Harsh', 'harsh@company.com', 'alice123', 'Developer'),
+        ('Krishana', 'krishana@company.com', 'bob123', 'Tester'),
+        ('Roy', 'roy@company.com', 'charlie123', 'Project Manager'),
+        ('Arjun', 'arjun@company.com', 'diana123', 'Developer'),
     ]
-    for username, email, password, role in seeded_users:
+    for user_id, (username, email, password, role) in enumerate(seeded_users, start=1):
         cursor.execute(
-            '''INSERT OR IGNORE INTO users (username, email, password_hash, role)
-               VALUES (?, ?, ?, ?)''',
-            (username, email, generate_password_hash(password), role)
+            '''INSERT OR IGNORE INTO users (id, username, email, password_hash, role)
+               VALUES (?, ?, ?, ?, ?)''',
+            (user_id, username, email, generate_password_hash(password), role)
         )
-    cursor.execute(
-        "UPDATE users SET password_hash = ? WHERE username = ? AND password_hash LIKE 'hashed_pwd_%'",
-        (generate_password_hash('alice123'), 'alice_dev')
-    )
-    cursor.execute(
-        "UPDATE users SET password_hash = ? WHERE username = ? AND password_hash LIKE 'hashed_pwd_%'",
-        (generate_password_hash('bob123'), 'bob_tester')
-    )
-    cursor.execute(
-        "UPDATE users SET password_hash = ? WHERE username = ? AND password_hash LIKE 'hashed_pwd_%'",
-        (generate_password_hash('charlie123'), 'charlie_pm')
-    )
-    cursor.execute(
-        "UPDATE users SET password_hash = ? WHERE username = ? AND password_hash LIKE 'hashed_pwd_%'",
-        (generate_password_hash('diana123'), 'diana_dev')
-    )
+        cursor.execute(
+            '''UPDATE users
+               SET username = ?, email = ?, password_hash = ?, role = ?
+               WHERE id = ?''',
+            (username, email, generate_password_hash(password), role, user_id)
+        )
     conn.commit()
     conn.close()
 
