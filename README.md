@@ -1,4 +1,4 @@
-Minor Project As Software Engineer Intern At Technglobal Pvt. Ltd.    \
+Minor Project As Software Engineer Intern At Technglobal Pvt. Ltd.    
 
 -> Bug Tracking System 
 
