@@ -1,26 +1,131 @@
+import os
+import sqlite3
+
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-import mysql.connector
+from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__)
 CORS(app)
 
-db_config = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'Harsh*6296',
-    'database': 'bug_tracker_db'
-}
+DATABASE_PATH = os.path.join(app.root_path, 'bug_tracker.db')
 
 def get_db_connection():
-    return mysql.connector.connect(**db_config)
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA foreign_keys = ON')
+    return conn
+
+def initialize_database():
+    conn = get_db_connection()
+    conn.executescript('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT,
+            role TEXT NOT NULL DEFAULT 'Developer'
+                CHECK (role IN ('Developer', 'Tester', 'Project Manager')),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS bug_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            priority TEXT DEFAULT 'Medium'
+                CHECK (priority IN ('Critical', 'High', 'Medium', 'Low')),
+            status TEXT DEFAULT 'Open'
+                CHECK (status IN ('Open', 'In Progress', 'Resolved', 'Closed')),
+            reporter_id INTEGER NOT NULL,
+            assignee_id INTEGER,
+            environment TEXT,
+            url_route TEXT,
+            error_log TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE RESTRICT,
+            FOREIGN KEY (assignee_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            bug_id INTEGER NOT NULL,
+            message TEXT NOT NULL,
+            is_read INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (bug_id) REFERENCES bug_records(id) ON DELETE CASCADE
+        );
+    ''')
+    cursor = conn.cursor()
+    seeded_users = [
+        ('alice_dev', 'alice@company.com', 'alice123', 'Developer'),
+        ('bob_tester', 'bob@company.com', 'bob123', 'Tester'),
+        ('charlie_pm', 'charlie@company.com', 'charlie123', 'Project Manager'),
+        ('diana_dev', 'diana@company.com', 'diana123', 'Developer'),
+    ]
+    for username, email, password, role in seeded_users:
+        cursor.execute(
+            '''INSERT OR IGNORE INTO users (username, email, password_hash, role)
+               VALUES (?, ?, ?, ?)''',
+            (username, email, generate_password_hash(password), role)
+        )
+    cursor.execute(
+        "UPDATE users SET password_hash = ? WHERE username = ? AND password_hash LIKE 'hashed_pwd_%'",
+        (generate_password_hash('alice123'), 'alice_dev')
+    )
+    cursor.execute(
+        "UPDATE users SET password_hash = ? WHERE username = ? AND password_hash LIKE 'hashed_pwd_%'",
+        (generate_password_hash('bob123'), 'bob_tester')
+    )
+    cursor.execute(
+        "UPDATE users SET password_hash = ? WHERE username = ? AND password_hash LIKE 'hashed_pwd_%'",
+        (generate_password_hash('charlie123'), 'charlie_pm')
+    )
+    cursor.execute(
+        "UPDATE users SET password_hash = ? WHERE username = ? AND password_hash LIKE 'hashed_pwd_%'",
+        (generate_password_hash('diana123'), 'diana_dev')
+    )
+    conn.commit()
+    conn.close()
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    data = request.get_json() or {}
+    user_id = data.get('user_id')
+    password = data.get('password', '')
+
+    if not user_id or not password:
+        return jsonify({"status": "error", "message": "User ID and password are required"}), 400
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, username, role, password_hash FROM users WHERE id = ?",
+            (user_id,)
+        )
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if not user or not check_password_hash(user['password_hash'], password):
+            return jsonify({"status": "error", "message": "Invalid user ID or password"}), 401
+
+        return jsonify({
+            "status": "success",
+            "user": {"id": user['id'], "username": user['username'], "role": user['role']}
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 def get_current_user(cursor):
     user_id = request.headers.get('X-User-ID', type=int)
     if not user_id:
         return None
 
-    cursor.execute("SELECT id, username, role FROM users WHERE id = %s", (user_id,))
+    cursor.execute("SELECT id, username, role FROM users WHERE id = ?", (user_id,))
     return cursor.fetchone()
 
 @app.route('/')
@@ -31,9 +136,9 @@ def serve_frontend():
 def get_users():
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor()
         cursor.execute("SELECT id, username, role FROM users ORDER BY id")
-        users = cursor.fetchall()
+        users = [dict(user) for user in cursor.fetchall()]
         cursor.close()
         conn.close()
         return jsonify({"status": "success", "data": users}), 200
@@ -64,15 +169,15 @@ def get_bugs():
     params = []
 
     if status:
-        query += " AND b.status = %s"
+        query += " AND b.status = ?"
         params.append(status)
 
     if priority:
-        query += " AND b.priority = %s"
+        query += " AND b.priority = ?"
         params.append(priority)
 
     if search:
-        query += " AND (b.title LIKE %s OR b.description LIKE %s OR b.url_route LIKE %s)"
+        query += " AND (b.title LIKE ? OR b.description LIKE ? OR b.url_route LIKE ?)"
         search_param = f"%{search}%"
         params.extend([search_param, search_param, search_param])
 
@@ -80,9 +185,9 @@ def get_bugs():
 
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor()
         cursor.execute(query, tuple(params))
-        bugs = cursor.fetchall()
+        bugs = [dict(bug) for bug in cursor.fetchall()]
         cursor.close()
         conn.close()
 
@@ -108,11 +213,11 @@ def create_bug():
 
     query = """
         INSERT INTO bug_records (title, description, priority, status, reporter_id, url_route)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        VALUES (?, ?, ?, ?, ?, ?)
     """
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor()
         current_user = get_current_user(cursor)
         if not current_user:
             cursor.close()
@@ -148,18 +253,13 @@ def update_bug(bug_id):
 
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor()
         current_user = get_current_user(cursor)
         if not current_user:
             cursor.close()
             conn.close()
             return jsonify({"status": "error", "message": "A valid user is required"}), 401
-        if current_user['role'] == 'Tester':
-            cursor.close()
-            conn.close()
-            return jsonify({"status": "error", "message": "Testers cannot update bugs"}), 403
-
-        cursor.execute("SELECT title, status, reporter_id, assignee_id FROM bug_records WHERE id = %s", (bug_id,))
+        cursor.execute("SELECT title, status, reporter_id, assignee_id FROM bug_records WHERE id = ?", (bug_id,))
         bug = cursor.fetchone()
 
         if not bug:
@@ -175,25 +275,30 @@ def update_bug(bug_id):
         updates = []
         params = []
 
-        if title: updates.append("title = %s"); params.append(title)
-        if description: updates.append("description = %s"); params.append(description)
-        if priority: updates.append("priority = %s"); params.append(priority)
-        if new_status: updates.append("status = %s"); params.append(new_status)
-        if new_assignee_id is not None: updates.append("assignee_id = %s"); params.append(new_assignee_id)
-        if url_route is not None: updates.append("url_route = %s"); params.append(url_route)
+        if current_user['role'] == 'Tester' and new_status and new_status != bug['status']:
+            cursor.close()
+            conn.close()
+            return jsonify({"status": "error", "message": "Testers cannot change bug status"}), 403
+
+        if title: updates.append("title = ?"); params.append(title)
+        if description: updates.append("description = ?"); params.append(description)
+        if priority: updates.append("priority = ?"); params.append(priority)
+        if new_status: updates.append("status = ?"); params.append(new_status)
+        if new_assignee_id is not None: updates.append("assignee_id = ?"); params.append(new_assignee_id)
+        if url_route is not None: updates.append("url_route = ?"); params.append(url_route)
 
         if not updates:
             return jsonify({"status": "error", "message": "No fields provided to update"}), 400
 
         params.append(bug_id)
-        update_query = f"UPDATE bug_records SET {', '.join(updates)} WHERE id = %s"
+        update_query = f"UPDATE bug_records SET {', '.join(updates)} WHERE id = ?"
         cursor.execute(update_query, tuple(params))
 
         # Log notification on status change
         if new_status and new_status != bug['status']:
             msg = f"Bug #{bug_id} status updated to '{new_status}'"
             if bug['reporter_id']:
-                cursor.execute("INSERT INTO notifications (user_id, bug_id, message) VALUES (%s, %s, %s)", 
+                cursor.execute("INSERT INTO notifications (user_id, bug_id, message) VALUES (?, ?, ?)", 
                                (bug['reporter_id'], bug_id, msg))
 
         conn.commit()
@@ -211,7 +316,7 @@ def update_bug(bug_id):
 def delete_bug(bug_id):
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor()
         current_user = get_current_user(cursor)
         if not current_user:
             cursor.close()
@@ -222,7 +327,7 @@ def delete_bug(bug_id):
             conn.close()
             return jsonify({"status": "error", "message": "Only Project Managers can delete bugs"}), 403
 
-        cursor.execute("DELETE FROM bug_records WHERE id = %s", (bug_id,))
+        cursor.execute("DELETE FROM bug_records WHERE id = ?", (bug_id,))
         conn.commit()
         affected_rows = cursor.rowcount
         cursor.close()
@@ -242,9 +347,9 @@ def delete_bug(bug_id):
 def get_notifications(user_id):
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT id, bug_id, message, is_read, created_at FROM notifications WHERE user_id = %s ORDER BY created_at DESC LIMIT 15", (user_id,))
-        notifs = cursor.fetchall()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, bug_id, message, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 15", (user_id,))
+        notifs = [dict(notif) for notif in cursor.fetchall()]
         unread_count = sum(1 for n in notifs if not n['is_read'])
         cursor.close()
         conn.close()
@@ -257,7 +362,7 @@ def mark_notification_read(notif_id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("UPDATE notifications SET is_read = TRUE WHERE id = %s", (notif_id,))
+        cursor.execute("UPDATE notifications SET is_read = TRUE WHERE id = ?", (notif_id,))
         conn.commit()
         cursor.close()
         conn.close()
@@ -266,4 +371,5 @@ def mark_notification_read(notif_id):
         return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
+    initialize_database()
     app.run(debug=True, port=5000)

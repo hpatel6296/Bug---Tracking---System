@@ -5,12 +5,7 @@
 -- for the bug tracking system with users, bug records,
 -- and notifications tables.
 
--- Drop existing database if it exists (optional)
-DROP DATABASE IF EXISTS bug_tracker_db;
-
--- Create the database
-CREATE DATABASE bug_tracker_db;
-USE bug_tracker_db;
+-- SQLite creates the local database file automatically.
 
 -- =====================================================
 -- TABLE: users
@@ -18,15 +13,13 @@ USE bug_tracker_db;
 -- Stores user information for developers, testers, and project managers
 -- Role: Developer, Tester, Project Manager
 CREATE TABLE users (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(100) NOT NULL UNIQUE,
-    email VARCHAR(100) NOT NULL UNIQUE,
-    password_hash VARCHAR(255),
-    role ENUM('Developer', 'Tester', 'Project Manager') NOT NULL DEFAULT 'Developer',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_role (role),
-    INDEX idx_username (username)
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT,
+    role TEXT NOT NULL DEFAULT 'Developer' CHECK (role IN ('Developer', 'Tester', 'Project Manager')),
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- =====================================================
@@ -35,26 +28,20 @@ CREATE TABLE users (
 -- Core table storing all bug reports
 -- Fields: ID, title, description, priority, status, assignee, reporter, environment, URL route, error log
 CREATE TABLE bug_records (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
-    description LONGTEXT NOT NULL,
-    priority ENUM('Critical', 'High', 'Medium', 'Low') DEFAULT 'Medium',
-    status ENUM('Open', 'In Progress', 'Resolved', 'Closed') DEFAULT 'Open',
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    priority TEXT DEFAULT 'Medium' CHECK (priority IN ('Critical', 'High', 'Medium', 'Low')),
+    status TEXT DEFAULT 'Open' CHECK (status IN ('Open', 'In Progress', 'Resolved', 'Closed')),
     reporter_id INT NOT NULL,
     assignee_id INT,
-    environment VARCHAR(100),
-    url_route VARCHAR(255),
-    error_log LONGTEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    environment TEXT,
+    url_route TEXT,
+    error_log TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE RESTRICT,
-    FOREIGN KEY (assignee_id) REFERENCES users(id) ON DELETE SET NULL,
-    INDEX idx_status (status),
-    INDEX idx_priority (priority),
-    INDEX idx_reporter (reporter_id),
-    INDEX idx_assignee (assignee_id),
-    INDEX idx_created_at (created_at),
-    FULLTEXT INDEX ft_search (title, description)
+    FOREIGN KEY (assignee_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- =====================================================
@@ -62,17 +49,14 @@ CREATE TABLE bug_records (
 -- =====================================================
 -- Tracks status updates and notifications for bug resolution
 CREATE TABLE notifications (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    bug_id INT NOT NULL,
-    message VARCHAR(500) NOT NULL,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    bug_id INTEGER NOT NULL,
+    message TEXT NOT NULL,
     is_read BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (bug_id) REFERENCES bug_records(id) ON DELETE CASCADE,
-    INDEX idx_user_id (user_id),
-    INDEX idx_is_read (is_read),
-    INDEX idx_created_at (created_at)
+    FOREIGN KEY (bug_id) REFERENCES bug_records(id) ON DELETE CASCADE
 );
 
 -- =====================================================

@@ -8,6 +8,10 @@
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     body { background-color: #f4f6f9; color: #333; padding: 20px; }
     .container { max-width: 1200px; margin: 0 auto; }
+    .login-panel { max-width: 390px; margin: 12vh auto 0; background: white; padding: 28px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+    .login-panel h1 { margin-bottom: 8px; }
+    .login-panel p { color: #64748b; margin-bottom: 20px; font-size: 14px; }
+    .login-error { color: #b91c1c; min-height: 20px; margin-top: 12px; font-size: 13px; }
 
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
     h1 { font-size: 26px; color: #1e293b; }
@@ -68,7 +72,24 @@
 </head>
 <body>
 
-  <div class="container">
+  <div class="login-panel" id="loginPanel">
+    <h1>Sign in</h1>
+    <p>Use your user ID and password to access the bug tracker.</p>
+    <form onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label for="loginUserId">User ID</label>
+        <input type="number" id="loginUserId" min="1" required placeholder="e.g., 2">
+      </div>
+      <div class="form-group">
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" required placeholder="Enter password">
+      </div>
+      <button class="btn" type="submit" style="width:100%;">Login</button>
+      <div class="login-error" id="loginError"></div>
+    </form>
+  </div>
+
+  <div class="container" id="dashboard" style="display:none;">
     <header>
       <h1>🐞 Bug Tracking Dashboard</h1>
       <div class="header-actions">
@@ -88,6 +109,7 @@
           </div>
         </div>
         <button class="btn" id="createBugButton" onclick="openCreateModal()">+ Report New Bug</button>
+        <button class="btn-secondary" onclick="logout()">Logout</button>
       </div>
     </header>
 
@@ -183,17 +205,54 @@
 
   <script>
     const API_BASE = "http://127.0.0.1:5000/api";
-    const CURRENT_USER_ID = 1;
     let debounceTimer;
     let currentBugs = [];
     let users = [];
-    let currentUserId = CURRENT_USER_ID;
+    let currentUserId = null;
 
     document.addEventListener("DOMContentLoaded", () => {
+      const savedUserId = sessionStorage.getItem("currentUserId");
+      if (savedUserId) startDashboard(parseInt(savedUserId));
+    });
+
+    async function handleLogin(event) {
+      event.preventDefault();
+      const error = document.getElementById("loginError");
+      error.innerText = "";
+      try {
+        const response = await fetch(`${API_BASE}/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: document.getElementById("loginUserId").value,
+            password: document.getElementById("loginPassword").value
+          })
+        });
+        const result = await response.json();
+        if (result.status !== "success") {
+          error.innerText = result.message;
+          return;
+        }
+        sessionStorage.setItem("currentUserId", result.user.id);
+        startDashboard(result.user.id);
+      } catch (err) {
+        error.innerText = "Could not connect to the server.";
+      }
+    }
+
+    function startDashboard(userId) {
+      currentUserId = userId;
+      document.getElementById("loginPanel").style.display = "none";
+      document.getElementById("dashboard").style.display = "block";
       fetchUsers();
       fetchBugs();
       fetchNotifications();
-    });
+    }
+
+    function logout() {
+      sessionStorage.removeItem("currentUserId");
+      window.location.reload();
+    }
 
     async function fetchUsers() {
       try {
@@ -204,9 +263,10 @@
         users = result.data;
         const userSelect = document.getElementById("currentUserSelect");
         userSelect.innerHTML = users.map(user =>
-          `<option value="${user.id}" ${user.id === CURRENT_USER_ID ? "selected" : ""}>${user.username}</option>`
+          `<option value="${user.id}" ${user.id === currentUserId ? "selected" : ""}>${user.username}</option>`
         ).join('');
-        updateCurrentUserRole(CURRENT_USER_ID);
+        userSelect.disabled = true;
+        updateCurrentUserRole(currentUserId);
         updateRoleControls();
         if (currentBugs.length) renderTable(currentBugs);
       } catch (err) {
@@ -293,7 +353,7 @@
 
     function renderActions(bugId) {
       const role = getCurrentUserRole();
-      const editButton = role !== "Tester"
+      const editButton = ["Tester", "Developer", "Project Manager"].includes(role)
         ? `<button class="btn-edit" onclick="openEditModal(${bugId})">✏️ Edit</button>`
         : "";
       const deleteButton = role === "Project Manager"
@@ -381,10 +441,6 @@
     }
 
     function openEditModal(bugId) {
-      if (getCurrentUserRole() === "Tester") {
-        alert("Testers cannot update bugs.");
-        return;
-      }
       const bug = currentBugs.find(b => b.id === bugId);
       if (!bug) return;
 
@@ -398,7 +454,8 @@
 
       document.getElementById("modalTitle").innerText = `Edit Bug #${bug.id}`;
       document.getElementById("submitBtn").innerText = "Update Bug";
-      document.getElementById("statusGroup").style.display = "block";
+      document.getElementById("statusGroup").style.display =
+        ["Developer", "Project Manager"].includes(getCurrentUserRole()) ? "block" : "none";
       document.getElementById("bugModal").style.display = "flex";
     }
 
