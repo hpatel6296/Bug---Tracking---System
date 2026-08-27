@@ -1,15 +1,5 @@
--- =====================================================
--- BUG TRACKING SYSTEM - DATABASE SCHEMA
--- =====================================================
--- This script creates the complete database structure
--- for the bug tracking system with users, bug records,
--- and notifications tables.
-
--- SQLite creates the local database file automatically.
-
--- =====================================================
+-- local database file.
 -- TABLE: users
--- =====================================================
 -- Stores user information for developers, testers, and project managers
 -- Role: Developer, Tester, Project Manager
 CREATE TABLE users (
@@ -21,10 +11,7 @@ CREATE TABLE users (
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
-
--- =====================================================
 -- TABLE: bug_records
--- =====================================================
 -- Core table storing all bug reports
 -- Fields: ID, title, description, priority, status, assignee, reporter, environment, URL route, error log
 CREATE TABLE bug_records (
@@ -43,10 +30,7 @@ CREATE TABLE bug_records (
     FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE RESTRICT,
     FOREIGN KEY (assignee_id) REFERENCES users(id) ON DELETE SET NULL
 );
-
--- =====================================================
 -- TABLE: notifications
--- =====================================================
 -- Tracks status updates and notifications for bug resolution
 CREATE TABLE notifications (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,11 +42,7 @@ CREATE TABLE notifications (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (bug_id) REFERENCES bug_records(id) ON DELETE CASCADE
 );
-
--- =====================================================
 -- Sample Data for Testing
--- =====================================================
-
 -- Insert sample users
 INSERT INTO users (username, email, password_hash, role) VALUES
 ('Harsh', 'harsh@company.com', 'hashed_pwd_1', 'Developer'),
@@ -70,7 +50,7 @@ INSERT INTO users (username, email, password_hash, role) VALUES
 ('Roy', 'roy@company.com', 'hashed_pwd_3', 'Project Manager'),
 ('Arjun', 'arjun@company.com', 'hashed_pwd_4', 'Developer');
 
--- Insert sample bugs
+-- sample bugs
 INSERT INTO bug_records (title, description, priority, status, reporter_id, assignee_id, environment, url_route, error_log) VALUES
 (
     'Login page crashes on mobile',
@@ -170,11 +150,3 @@ INSERT INTO notifications (user_id, bug_id, message, is_read) VALUES
 (1, 6, 'New bug reported: API rate limiting not working correctly (Critical)', FALSE),
 (4, 6, 'Bug #6 assigned to you: API rate limiting not working correctly', FALSE),
 (1, 8, 'Status update: Bug #8 priority changed to High', TRUE);
-
--- =====================================================
--- Verification Query (Optional: Run to verify setup)
--- =====================================================
--- SELECT 
---     (SELECT COUNT(*) FROM users) as total_users,
---     (SELECT COUNT(*) FROM bug_records) as total_bugs,
---     (SELECT COUNT(*) FROM notifications) as total_notifications;
